@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, Optional, Tuple, Union
 from warnings import warn
 
 import torch
+import numpy as np
 from torch import Tensor
 from torch.distributions import Distribution
 from torch.utils import data
@@ -91,6 +92,8 @@ class NeuralInference(ABC):
         logging_level: Union[int, str] = "WARNING",
         summary_writer: Optional[SummaryWriter] = None,
         show_progress_bars: bool = True,
+        train_loader: Optional[data.DataLoader] = None,
+        val_loader: Optional[data.DataLoader] = None,
     ):
         r"""Base class for inference methods.
 
@@ -150,6 +153,10 @@ class NeuralInference(ABC):
             epoch_durations_sec=[],
         )
 
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.use_loader = train_loader is not None and val_loader is not None
+
     def get_simulations(
         self,
         starting_round: int = 0,
@@ -168,16 +175,18 @@ class NeuralInference(ABC):
 
         Returns: Parameters, simulation outputs, prior masks.
         """
-
-        theta = get_simulations_since_round(
-            self._theta_roundwise, self._data_round_index, starting_round
-        )
-        x = get_simulations_since_round(
-            self._x_roundwise, self._data_round_index, starting_round
-        )
-        prior_masks = get_simulations_since_round(
-            self._prior_masks, self._data_round_index, starting_round
-        )
+        if not self.use_loader:
+            theta = get_simulations_since_round(
+                self._theta_roundwise, self._data_round_index, starting_round
+            )
+            x = get_simulations_since_round(
+                self._x_roundwise, self._data_round_index, starting_round
+            )
+            prior_masks = get_simulations_since_round(
+                self._prior_masks, self._data_round_index, starting_round
+            )
+        else:
+            theta, x, prior_masks = self.train_loader.dataset[np.arange(100)]
 
         return theta, x, prior_masks
 
@@ -220,6 +229,8 @@ class NeuralInference(ABC):
             Tuple of dataloaders for training and validation.
 
         """
+        if self.use_loader:
+            return self.train_loader, self.val_loader
 
         #
         theta, x, prior_masks = self.get_simulations(starting_round)

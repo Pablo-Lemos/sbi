@@ -9,6 +9,7 @@ from pyknos.mdn.mdn import MultivariateGaussianMDN as mdn
 from pyknos.nflows.transforms import CompositeTransform
 from torch import Tensor, eye, nn, ones
 from torch.distributions import Distribution, MultivariateNormal, Uniform
+from torch.utils import data
 
 from sbi import utils as utils
 from sbi.inference.posteriors.direct_posterior import DirectPosterior
@@ -33,6 +34,8 @@ class SNPE_C(PosteriorEstimator):
         logging_level: Union[int, str] = "WARNING",
         summary_writer: Optional[TensorboardSummaryWriter] = None,
         show_progress_bars: bool = True,
+        train_loader: Optional[data.DataLoader] = None,
+        val_loader: Optional[data.DataLoader] = None,
     ):
         r"""SNPE-C / APT [1].
 
@@ -152,7 +155,10 @@ class SNPE_C(PosteriorEstimator):
             locals(), entries=("self", "__class__", "num_atoms", "use_combined_loss")
         )
 
-        self._round = max(self._data_round_index)
+        try:
+            self._round = max(self._data_round_index)
+        except ValueError:
+            self._round = 0
 
         if self._round > 0:
             # Set the proposal to the last proposal that was passed by the user. For

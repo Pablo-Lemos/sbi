@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, Optional, Union
 from warnings import warn
 
 import torch
+import numpy as np
 from torch import Tensor, nn, ones, optim
 from torch.distributions import Distribution
 from torch.nn.utils.clip_grad import clip_grad_norm_
@@ -46,6 +47,8 @@ class PosteriorEstimator(NeuralInference, ABC):
         logging_level: Union[int, str] = "WARNING",
         summary_writer: Optional[SummaryWriter] = None,
         show_progress_bars: bool = True,
+        train_loader: Optional[data.DataLoader] = None,
+        val_loader: Optional[data.DataLoader] = None,
     ):
         """Base class for Sequential Neural Posterior Estimation methods.
 
@@ -68,6 +71,8 @@ class PosteriorEstimator(NeuralInference, ABC):
             logging_level=logging_level,
             summary_writer=summary_writer,
             show_progress_bars=show_progress_bars,
+            train_loader=train_loader,
+            val_loader=val_loader
         )
 
         # As detailed in the docstring, `density_estimator` is either a string or
@@ -253,7 +258,10 @@ class PosteriorEstimator(NeuralInference, ABC):
             Density estimator that approximates the distribution $p(\theta|x)$.
         """
         # Load data from most recent round.
-        self._round = max(self._data_round_index)
+        try:
+            self._round = max(self._data_round_index)
+        except ValueError:
+            self._round = 0
 
         if self._round == 0 and self._neural_net is not None:
             assert force_first_round_loss, (
@@ -288,7 +296,10 @@ class PosteriorEstimator(NeuralInference, ABC):
         # atomic SNPE, it does not matter what the proposal is. For non-atomic
         # SNPE, we only use the latest data that was passed, i.e. the one from the
         # last proposal.
-        proposal = self._proposal_roundwise[-1]
+        try:
+            proposal = self._proposal_roundwise[-1]
+        except IndexError:
+            proposal = None #torch.tensor([True], device=self._device)
 
         train_loader, val_loader = self.get_dataloaders(
             start_idx,
@@ -307,10 +318,16 @@ class PosteriorEstimator(NeuralInference, ABC):
             # Get theta,x to initialize NN
             theta, x, _ = self.get_simulations(starting_round=start_idx)
             # Use only training data for building the neural net (z-scoring transforms)
-            self._neural_net = self._build_neural_net(
-                theta[self.train_indices].to("cpu"),
-                x[self.train_indices].to("cpu"),
-            )
+            try:
+                self._neural_net = self._build_neural_net(
+                    theta[self.train_indices].to("cpu"),
+                    x[self.train_indices].to("cpu"),
+                )
+            except AttributeError:
+                self._neural_net = self._build_neural_net(
+                    theta.to("cpu"),
+                    x.to("cpu"),
+                )
             self._x_shape = x_shape_from_simulation(x.to("cpu"))
 
             test_posterior_net_for_multi_d_x(
@@ -357,6 +374,7 @@ class PosteriorEstimator(NeuralInference, ABC):
                 )
                 train_loss = torch.mean(train_losses)
                 train_log_probs_sum -= train_losses.sum().item()
+                #print(train_loss)
 
                 train_loss.backward()
                 if clip_max_norm is not None:

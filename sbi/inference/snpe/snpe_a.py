@@ -13,6 +13,7 @@ from pyknos.nflows import flows
 from pyknos.nflows.transforms import CompositeTransform
 from torch import Tensor
 from torch.distributions import Distribution, MultivariateNormal
+from torch.utils import data
 
 import sbi.utils as utils
 from sbi.inference.posteriors.direct_posterior import DirectPosterior
@@ -31,6 +32,8 @@ class SNPE_A(PosteriorEstimator):
         logging_level: Union[int, str] = "WARNING",
         summary_writer: Optional[TensorboardSummaryWriter] = None,
         show_progress_bars: bool = True,
+        train_loader: Optional[data.DataLoader] = None,
+        val_loader: Optional[data.DataLoader] = None,
     ):
         r"""SNPE-A [1].
 
